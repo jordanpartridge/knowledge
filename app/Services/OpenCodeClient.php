@@ -26,8 +26,11 @@ class OpenCodeClient
         $sessionId = $this->ensureSession();
 
         $response = $this->client()
-            ->post("/session/{$sessionId}/prompt", [
-                'message' => $message,
+            ->timeout(120)
+            ->post("/session/{$sessionId}/message", [
+                'parts' => [
+                    ['type' => 'text', 'text' => $message],
+                ],
                 'model' => [
                     'providerID' => $providerID,
                     'modelID' => $modelID,
@@ -38,7 +41,28 @@ class OpenCodeClient
             throw new RuntimeException("OpenCode prompt failed: {$response->status()} {$response->body()}");
         }
 
-        return $response->json();
+        $data = $response->json();
+        $info = $data['info'] ?? [];
+
+        if (isset($info['error'])) {
+            $errorMsg = $info['error']['data']['message'] ?? 'Unknown error';
+            throw new RuntimeException("Model error ({$providerID}/{$modelID}): {$errorMsg}");
+        }
+
+        $text = '';
+        foreach ($data['parts'] ?? [] as $part) {
+            if (($part['type'] ?? '') === 'text') {
+                $text .= $part['text'] ?? '';
+            }
+        }
+
+        return [
+            'response' => $text,
+            'content' => $text,
+            'tokens' => $info['tokens'] ?? [],
+            'cost' => $info['cost'] ?? 0,
+            'messageId' => $info['id'] ?? null,
+        ];
     }
 
     /**
@@ -46,7 +70,7 @@ class OpenCodeClient
      */
     public function createSession(): string
     {
-        $response = $this->client()->post('/session');
+        $response = $this->client()->post('/session', []);
 
         if ($response->failed()) {
             throw new RuntimeException("Failed to create session: {$response->status()}");
@@ -55,6 +79,20 @@ class OpenCodeClient
         $this->sessionId = $response->json('id');
 
         return $this->sessionId;
+    }
+
+    /**
+     * List available providers and their models.
+     */
+    public function providers(): array
+    {
+        $response = $this->client()->get('/provider');
+
+        if ($response->failed()) {
+            throw new RuntimeException("Failed to fetch providers: {$response->status()}");
+        }
+
+        return $response->json();
     }
 
     /**

@@ -10,6 +10,7 @@ class KnowledgeAiService
         private readonly OpenCodeClient $opencode,
         private readonly ModelRouter $router,
         private readonly PrefrontalClient $prefrontal,
+        private readonly ?ResponseCache $cache = null,
     ) {}
 
     /**
@@ -20,17 +21,27 @@ class KnowledgeAiService
     public function query(string $query, ?string $model = null, int $contextLimit = 10): array
     {
         $route = $this->router->resolve($query, $model);
+
+        $cached = $this->cache?->get($query, $route['model']);
+        if ($cached !== null) {
+            return $cached;
+        }
+
         $context = $this->prefrontal->search($query, $contextLimit);
         $prompt = $this->buildPrompt($query, $context);
 
         $response = $this->opencode->prompt($prompt, $route['provider'], $route['model']);
 
-        return [
+        $result = [
             'query' => $query,
             'response' => $response,
             'model' => $route,
             'context_entries' => count($context['entries'] ?? []),
         ];
+
+        $this->cache?->put($query, $route['model'], $result);
+
+        return $result;
     }
 
     /**
@@ -134,6 +145,7 @@ class KnowledgeAiService
             opencode: OpenCodeClient::fromConfig(),
             router: new ModelRouter,
             prefrontal: PrefrontalClient::fromConfig(),
+            cache: ResponseCache::fromConfig(),
         );
     }
 }

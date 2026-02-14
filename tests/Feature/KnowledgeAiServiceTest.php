@@ -9,8 +9,9 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function () {
     Http::fake([
         '*/session' => Http::response(['id' => 'test-session'], 200),
-        '*/session/test-session/prompt' => Http::response([
-            'response' => 'AI generated answer based on knowledge',
+        '*/session/test-session/message' => Http::response([
+            'info' => ['id' => 'msg-1', 'tokens' => ['input' => 10, 'output' => 20], 'cost' => 0],
+            'parts' => [['type' => 'text', 'text' => 'AI generated answer based on knowledge']],
         ], 200),
         '*/filter*' => Http::response([
             'entries' => [
@@ -70,14 +71,15 @@ it('includes prompt with knowledge entries', function () {
     $result = $this->service->query('how do queues work');
 
     Http::assertSent(function ($request) {
-        if (! str_contains($request->url(), '/prompt')) {
+        if (! str_contains($request->url(), '/message')) {
             return false;
         }
 
-        $message = $request['message'] ?? '';
+        $parts = $request['parts'] ?? [];
+        $text = $parts[0]['text'] ?? '';
 
-        return str_contains($message, 'Knowledge Entries')
-            && str_contains($message, 'Laravel Queues');
+        return str_contains($text, 'Knowledge Entries')
+            && str_contains($text, 'Laravel Queues');
     });
 });
 

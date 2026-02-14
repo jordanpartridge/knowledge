@@ -5,8 +5,9 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function () {
     Http::fake([
         '*/session' => Http::response(['id' => 'test-session'], 200),
-        '*/session/test-session/prompt' => Http::response([
-            'response' => 'This is the AI response about your knowledge',
+        '*/session/test-session/message' => Http::response([
+            'info' => ['id' => 'msg-1', 'tokens' => ['input' => 10, 'output' => 20], 'cost' => 0],
+            'parts' => [['type' => 'text', 'text' => 'This is the AI response about your knowledge']],
         ], 200),
         '*/filter*' => Http::response([
             'entries' => [
